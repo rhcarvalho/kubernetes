@@ -20,9 +20,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -438,6 +440,22 @@ func (d *kubeDockerClient) StartExec(startExec string, opts dockertypes.ExecStar
 		return err
 	}
 	defer resp.Close()
+
+	// ---------------------------------------------------------------------
+	// Hack, the timeout flag is defined when running this from kill_exec.
+	timeoutFlag := flag.Lookup("timeout")
+	timeout, _ := time.ParseDuration(timeoutFlag.Value.String())
+	// ---------------------------------------------------------------------
+	if timeout > 0 {
+		fmt.Fprintf(os.Stderr, "*** Will close hijacked connection after %v! ***\n", timeout)
+		time.AfterFunc(timeout, func() {
+			fmt.Fprintln(os.Stderr, "*** Closing hijacked connection! ***")
+			resp.Close()
+			fmt.Fprintln(os.Stderr, "*** Closed hijacked connection! ***")
+		})
+	}
+	// ---------------------------------------------------------------------
+
 	return d.holdHijackedConnection(sopts.RawTerminal || opts.Tty, sopts.InputStream, sopts.OutputStream, sopts.ErrorStream, resp)
 }
 
